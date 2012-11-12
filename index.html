@@ -35,36 +35,33 @@ form {
 <script>
 
 var n = 4, // number of layers
-    m = 64, // number of samples per layer
+    m = 58, // number of samples per layer
     stack = d3.layout.stack(),
-    layers = stack(d3.range(n).map(function() { return bumpLayer(m, .1); }));
+    layers = stack(d3.range(n).map(function() { return bumpLayer(m, .1); })),
+    yGroupMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y; }); }),
+    yStackMax = d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y0 + d.y; }); });
 
-var margin = {top: 20, right: 0, bottom: 20, left: 0},
+var margin = {top: 40, right: 10, bottom: 20, left: 10},
     width = 960 - margin.left - margin.right,
     height = 500 - margin.top - margin.bottom;
 
 var x = d3.scale.ordinal()
     .domain(d3.range(m))
-    .rangeRoundBands([0, width], .1);
+    .rangeRoundBands([0, width], .08);
 
 var y = d3.scale.linear()
-    .domain([0, d3.max(layers, function(layer) { return d3.max(layer, function(d) { return d.y0 + d.y; }); })])
+    .domain([0, yStackMax])
     .range([height, 0]);
 
 var color = d3.scale.linear()
+    .domain([0, n - 1])
     .range(["#aad", "#556"]);
 
 var xAxis = d3.svg.axis()
     .scale(x)
+    .tickSize(0)
+    .tickPadding(6)
     .orient("bottom");
-
-// var mx = m,
-//     my = d3.max(data, function(d) { return d3.max(d, function(d) { return d.y0 + d.y; }); }),
-//     mz = d3.max(data, function(d) { return d3.max(d, function(d) { return d.y; }); }),
-//     x = function(d) { return d.x * width / mx; },
-//     y0 = function(d) { return height - d.y0 * height / my; },
-//     y1 = function(d) { return height - (d.y + d.y0) * height / my; },
-//     y2 = function(d) { return d.y * height / mz; }; // or `my` to not rescale
 
 var svg = d3.select("body").append("svg")
     .attr("width", width + margin.left + margin.right)
@@ -72,30 +69,29 @@ var svg = d3.select("body").append("svg")
   .append("g")
     .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-svg.append("g")
-    .attr("class", "x axis")
-    .call(xAxis);
-
 var layer = svg.selectAll(".layer")
     .data(layers)
   .enter().append("g")
     .attr("class", "layer")
-    .style("fill", function(layer, i) { return color(i / (n - 1)); });
+    .style("fill", function(d, i) { return color(i); });
 
-var bar = layer.selectAll(".bar")
-    .data(function(layer) { return layer; })
-  .enter().append("g")
-    .attr("class", "bar")
-    .attr("transform", function(d) { return "translate(" + x(d.x) + ",0)"; });
-
-bar.append("rect")
-    .attr("width", x.rangeBand())
+var rect = layer.selectAll("rect")
+    .data(function(d) { return d; })
+  .enter().append("rect")
+    .attr("x", function(d) { return x(d.x); })
     .attr("y", height)
-    .attr("height", 0)
-  .transition()
+    .attr("width", x.rangeBand())
+    .attr("height", 0);
+
+rect.transition()
     .delay(function(d, i) { return i * 10; })
-    .attr("y", function(d) { return y(d.y0); })
-    .attr("height", function(d) { return y(d.y0 + d.y) - y(d.y0); });
+    .attr("y", function(d) { return y(d.y0 + d.y); })
+    .attr("height", function(d) { return y(d.y0) - y(d.y0 + d.y); });
+
+svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(xAxis);
 
 d3.selectAll("input").on("change", function change() {
   if (this.value === "grouped") transitionGrouped();
@@ -103,25 +99,29 @@ d3.selectAll("input").on("change", function change() {
 });
 
 function transitionGrouped() {
-  d3.selectAll(".layer rect").transition()
+  y.domain([0, yGroupMax]);
+
+  rect.transition()
       .duration(500)
-      .delay(function(d, i) { return (i % m) * 10; })
-      .attr("x", function(d, i) { return x({x: .9 * Math.floor(i / m) / n}); })
-      .attr("width", x({x: .9 / n}))
+      .delay(function(d, i) { return i * 10; })
+      .attr("x", function(d, i, j) { return x(d.x) + x.rangeBand() / n * j; })
+      .attr("width", x.rangeBand() / n)
     .transition()
-      .attr("y", function(d) { return height - y2(d); })
-      .attr("height", y2);
+      .attr("y", function(d) { return y(d.y); })
+      .attr("height", function(d) { return height - y(d.y); });
 }
 
 function transitionStacked() {
-  d3.selectAll(".layer rect").transition()
+  y.domain([0, yStackMax]);
+
+  rect.transition()
       .duration(500)
-      .delay(function(d, i) { return (i % m) * 10; })
-      .attr("y", y1)
-      .attr("height", function(d) { return y0(d) - y1(d); })
+      .delay(function(d, i) { return i * 10; })
+      .attr("y", function(d) { return y(d.y0 + d.y); })
+      .attr("height", function(d) { return y(d.y0) - y(d.y0 + d.y); })
     .transition()
-      .attr("x", 0)
-      .attr("width", x({x: .9}));
+      .attr("x", function(d) { return x(d.x); })
+      .attr("width", x.rangeBand());
 }
 
 // Inspired by Lee Byron's test data generator.
