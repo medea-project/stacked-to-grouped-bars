@@ -93,10 +93,17 @@ svg.append("g")
     .attr("transform", "translate(0," + height + ")")
     .call(xAxis);
 
-d3.selectAll("input").on("change", function change() {
+d3.selectAll("input").on("change", change);
+
+var timeout = setTimeout(function() {
+  d3.select("input[value=\"grouped\"]").property("checked", true).each(change);
+}, 2000);
+
+function change() {
+  clearTimeout(timeout);
   if (this.value === "grouped") transitionGrouped();
   else transitionStacked();
-});
+}
 
 function transitionGrouped() {
   y.domain([0, yGroupMax]);
